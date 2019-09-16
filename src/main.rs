@@ -102,7 +102,7 @@ fn main() -> Result<()> {
             PathBuf::from_str(matches.value_of("dest_pattern").unwrap())?,
         )
     };
-    two_arg_helper(copy_adapter, src, dst)
+    two_arg_helper(func, src, dst)
 }
 
 fn rename_adapter(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<()> {
@@ -130,25 +130,30 @@ fn two_arg_helper(
     from: PathBuf,
     to: PathBuf,
 ) -> Result<()> {
-    let (src_file_name, dst_file_name) = (
-        from.file_name()
-            .ok_or("no filename in source pattern".to_string())?
-            .to_string_lossy(),
-        to.file_name()
-            .ok_or("no filename in destination pattern".to_string())?
-            .to_string_lossy(),
+    let src_file_name = from
+        .file_name()
+        .ok_or("no filename in source pattern".to_string())?
+        .to_string_lossy();
+    let (from_prefix, from_pattern) = (
+        from.parent(),
+        Regex::new(format!("^{}$", src_file_name).as_str())?,
     );
-    let (from_prefix, from_pattern) = (from.parent(), Regex::new(src_file_name.as_ref())?);
-    let to_prefix = to.parent();
 
     let dir = from_prefix.unwrap_or(Path::new("."));
     for file in dir.read_dir()? {
         if let Ok(file) = file {
-            let path = file.path().to_string_lossy().into_owned();
-            //let dst = from_pattern.replace_all(&path, dst_file_name);
-            let dst = dst_file_name.clone();
+            let path = file
+                .path()
+                .file_name()
+                .ok_or(format!(
+                    "could not get file_name from path: {:?}",
+                    file.path()
+                ))?
+                .to_string_lossy()
+                .into_owned();
+            let dst = from_pattern.replace_all(path.as_ref(), to.to_string_lossy().as_ref());
             if dst != path {
-                func(PathBuf::from_str(&path)?, PathBuf::from_str(&dst)?)?;
+                func(file.path(), PathBuf::from_str(&dst)?)?;
             }
         }
     }
